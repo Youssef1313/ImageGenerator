@@ -3,48 +3,45 @@ using System.Drawing.Drawing2D;
 using System.Text;
 using ImageGenerator;
 
-// Output image is 96dpi, and Skia doesn't seem to support changing it.
-// Use this website to convert cm dimensions to pixels under a given resolution (in dpi) https://www.pixelto.net/cm-to-px-converter
+var gMeasure = Graphics.FromImage(new Bitmap(1, 1));
+gMeasure.CompositingQuality = CompositingQuality.HighQuality;
 
-const float Resolution = 300;
-const int WidthFor96Dpi = 794;
-const int HeightFor96Dpi = 1134;
-var bitmap = new Bitmap(width: (int)(WidthFor96Dpi * Resolution / 96), height: (int)(HeightFor96Dpi * Resolution / 96));
-bitmap.SetResolution(Resolution, Resolution);
-var g = Graphics.FromImage(bitmap);
-g.CompositingQuality = CompositingQuality.HighQuality;
-var font = new Font("Times New Roman", 16);
+var wordBuilder = new StringBuilder();
+var random = new Random();
+const int NumberOfWords = 5000;
+Directory.CreateDirectory("./data/text");
+var quality = CompositingQuality.HighQuality;
 
-var lineBuilder = new StringBuilder();
-var pageBuilder = new StringBuilder();
-const int NumberOfImages = 10;
-Directory.CreateDirectory("./data/");
-int lineHeight;
-for (int i = 0; i < NumberOfImages; i++)
+var fontNames = new[]
 {
-    g.FillRectangle(Brushes.White, new(0, 0, bitmap.Width, bitmap.Height));
-    for (int line = 50; line < bitmap.Height; line += lineHeight + 5)
+    "Times New Roman",
+    "Tahoma",
+    "Arial",
+    "Calibri",
+    "Arabic Typesetting", //hard font.
+};
+
+for (int i = 0; i < NumberOfWords; i++)
+{
+    var wordLength = random.Next(1, 17);
+    for (int j = 0; j < wordLength; j++)
     {
-        lineBuilder.Clear();
-        // Don't generate a space at the beginning of a new line.
-        ArabicCharacterGenerator.PreviousWasSpace = true;
-        while (true)
-        {
-            lineBuilder.Append(ArabicCharacterGenerator.Generate());
-            var text = lineBuilder.ToString();
-            var textSize = g.MeasureString(text, font);
-            lineHeight = (int)textSize.Height;
-            if (textSize.Width >= bitmap.Width)
-            {
-                g.DrawString(text, font, Brushes.Black, 0, line);
-                pageBuilder.AppendLine(text);
-                break;
-            }
-        }
+        wordBuilder.Append(ArabicCharacterGenerator.Generate());
     }
 
-    bitmap.Save($"./data/{i}.png");
-    File.WriteAllText($"./data/{i}.txt", pageBuilder.ToString());
-    pageBuilder.Clear();
-}
+    var fontSize = random.Next(12, 25);
+    var fontName = fontNames[random.Next(0, fontNames.Length)];
+    var font = new Font(fontName, fontSize);
+    var text = wordBuilder.ToString();
+    var textSize = gMeasure.MeasureString(text, font);
+    var bitmap = new Bitmap((int)textSize.Width + 100, (int)textSize.Height + 50);
+    var g = Graphics.FromImage(bitmap);
+    g.CompositingQuality = quality;
+    quality = quality == CompositingQuality.HighQuality ? CompositingQuality.HighSpeed : CompositingQuality.HighQuality;
+    g.FillRectangle(Brushes.White, new(0, 0, bitmap.Width, bitmap.Height));
+    g.DrawString(text, font, Brushes.Black, (bitmap.Width - textSize.Width) / 2, (bitmap.Height - textSize.Height) / 2);
 
+    bitmap.Save($"./data/{text}.png");
+    File.WriteAllText($"./data/text/{text}.txt", $"{fontSize},{fontName}");
+    wordBuilder.Clear();
+}
