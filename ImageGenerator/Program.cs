@@ -1,20 +1,17 @@
-﻿using System.Diagnostics;
-using System.Drawing;
-using System.Drawing.Drawing2D;
-using System.Reflection;
-using System.Security.Cryptography.X509Certificates;
-using System.Text;
+﻿using System.Drawing;
 using ImageGenerator;
 
 // Output image is 96dpi.
 // Use this website to convert cm dimensions to pixels under a given resolution (in dpi) https://www.pixelto.net/cm-to-px-converter
-const int WidthFor96Dpi = 794;
-const int HeightFor96Dpi = 1134;
-var bitmap = new Bitmap(width: WidthFor96Dpi, height: HeightFor96Dpi);
+float mmpi = 25.4f;
+int dpi = 150;
+var bitmap = new Bitmap((int)(210 / mmpi * dpi), (int)(297 / mmpi * dpi));
+bitmap.SetResolution(dpi, dpi);
+
 var g = Graphics.FromImage(bitmap);
 
 var random = new Random();
-const int NumberOfPages = 1;
+const int NumberOfPages = 10;
 Directory.CreateDirectory("./data/text");
 
 var fontNames = new[]
@@ -37,10 +34,10 @@ foreach (var fontName in fontNames)
     {
         g.FillRectangle(Brushes.White, new(0, 0, bitmap.Width, bitmap.Height));
         var currentY = 0;
-
-        // one line. Hard coded for now. TODO: Increase
-        for (int lineIndex = 0; lineIndex < 20; lineIndex++)
+        // Hard coded for now.
+        for (int lineIndex = 0; lineIndex < 40; lineIndex++)
         {
+            var currentX = bitmap.Width;
             var lineKind = GetLineKind();
             var font = lineKind switch
             {
@@ -52,38 +49,31 @@ foreach (var fontName in fontNames)
             var numberOfWords = GetNumberOfWords(lineKind);
             var words = Enumerable.Range(0, numberOfWords).Select((_, _) => generator.Generate()).ToArray();
 
-            var lineText = string.Join(' ', words);
-            var lineTextMeasure = g.MeasureString(lineText, font);
-
-            var ranges = new List<CharacterRange>();
-            var startRange = 0;
-            foreach (var word in words)
-            {
-                ranges.Add(new CharacterRange(startRange, word.Length));
-                startRange += word.Length;
-                ranges.Add(new CharacterRange(startRange, 1));
-                startRange++;
-            }
-
-            ranges.RemoveAt(ranges.Count - 1);
-
             var stringFormat = new StringFormat();
             stringFormat.FormatFlags = StringFormatFlags.DirectionRightToLeft;
-            stringFormat.SetMeasurableCharacterRanges(ranges.ToArray());
-            var rect = new RectangleF(x: 0, y: currentY, width: bitmap.Width, height: lineTextMeasure.Height);
-            var measuredRanges = g.MeasureCharacterRanges(lineText, font, rect, stringFormat);
 
-            Debug.Assert(ranges.Count == measuredRanges.Length);
-            var pen = Pens.Red;
-            for (int wordCounter = 0; wordCounter < ranges.Count; wordCounter += 2)
+            var lineText = string.Join(' ', words);
+            var lineTextMeasure = g.MeasureString(lineText, font, bitmap.Width, stringFormat);
+
+            if (currentY + lineTextMeasure.Height > bitmap.Height)
             {
-                var currentMeasured = measuredRanges[wordCounter];
-                var currentRange = ranges[wordCounter];
-                var currentWord = lineText.Substring(currentRange.First, currentRange.Length);
-                var currentRect = currentMeasured.GetBounds(g);
-                var gMeasure = g.MeasureString(currentWord, font);
-                g.DrawString(currentWord, font, Brushes.Black, new RectangleF(currentRect.X, currentRect.Y, gMeasure.Width, gMeasure.Height), stringFormat);
-                g.DrawRectangle(pen, currentRect);
+                break;
+            }
+
+            var spaceMeasure = g.MeasureString(" ", font, bitmap.Width, stringFormat);
+            var pen = Pens.Red;
+            foreach (var word in words)
+            {
+                var wordMeasure = g.MeasureString(word, font, bitmap.Width, stringFormat);
+                var leftOfWord = currentX - wordMeasure.Width;
+                if (leftOfWord < 0)
+                {
+                    continue;
+                }
+                g.DrawString(word, font, Brushes.Black, leftOfWord , currentY);
+                g.DrawRectangle(pen, new RectangleF(leftOfWord, currentY, wordMeasure.Width, wordMeasure.Height));
+                currentX -= (int)(wordMeasure.Width + spaceMeasure.Width);
+                
                 pen = pen == Pens.Red ? Pens.Blue : Pens.Red;
             }
 
