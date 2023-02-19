@@ -1,11 +1,11 @@
 ﻿namespace ImageGenerator;
 
-internal sealed class ArabicCharacterGenerator
+internal sealed class ArabicWordGenerator
 {
     private readonly static Random s_random = new();
     private readonly string[] _words;
 
-    public ArabicCharacterGenerator(string fileName)
+    public ArabicWordGenerator(string fileName)
     {
         _words = File.ReadAllLines(fileName);
     }
