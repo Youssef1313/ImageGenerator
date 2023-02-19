@@ -1,4 +1,5 @@
 ﻿using System.Drawing;
+using System.Text.Json;
 using ImageGenerator;
 
 // Output image is 96dpi.
@@ -32,6 +33,7 @@ foreach (var fontName in fontNames)
     var titleFont = new Font(fontName, fontSize + 8, FontStyle.Bold);
     for (int pageIndex = 0; pageIndex < NumberOfPages; pageIndex++)
     {
+        var model = new JsonModel();
         g.FillRectangle(Brushes.White, new(0, 0, bitmap.Width, bitmap.Height));
         var currentY = 0;
         // Hard coded for now.
@@ -61,7 +63,7 @@ foreach (var fontName in fontNames)
             }
 
             var spaceMeasure = g.MeasureString(" ", font, bitmap.Width, stringFormat);
-            var pen = Pens.Red;
+            //var pen = Pens.Red;
             foreach (var word in words)
             {
                 var wordMeasure = g.MeasureString(word, font, bitmap.Width, stringFormat);
@@ -71,10 +73,12 @@ foreach (var fontName in fontNames)
                     continue;
                 }
                 g.DrawString(word, font, Brushes.Black, leftOfWord , currentY);
-                g.DrawRectangle(pen, new RectangleF(leftOfWord, currentY, wordMeasure.Width, wordMeasure.Height));
+                var wordRect = new RectangleF(leftOfWord, currentY, wordMeasure.Width, wordMeasure.Height);
+                //g.DrawRectangle(pen, wordRect);
+                model.Objects.Add(new() { Text = word, Category = Category.TextId, BoundingBox = new[] { wordRect.X, wordRect.Y, wordRect.Width, wordRect.Height } });
                 currentX -= (int)(wordMeasure.Width + spaceMeasure.Width);
                 
-                pen = pen == Pens.Red ? Pens.Blue : Pens.Red;
+                //pen = pen == Pens.Red ? Pens.Blue : Pens.Red;
             }
 
             currentY += (int)(lineTextMeasure.Height + 10);
@@ -82,6 +86,7 @@ foreach (var fontName in fontNames)
 
         Directory.CreateDirectory($"./data/{fontName}");
         bitmap.Save($"./data/{fontName}/{pageIndex}.png");
+        File.WriteAllText($"./data/{fontName}/{pageIndex}.json", JsonSerializer.Serialize(model));
     }
 }
 
