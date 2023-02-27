@@ -1,4 +1,5 @@
-﻿using System.Drawing;
+﻿using System.Diagnostics;
+using System.Drawing;
 using System.Text.Json;
 using ImageGenerator;
 
@@ -11,7 +12,6 @@ bitmap.SetResolution(dpi, dpi);
 
 var g = Graphics.FromImage(bitmap);
 
-var random = new Random();
 const int NumberOfPages = 10;
 Directory.CreateDirectory("./data/text");
 
@@ -25,9 +25,11 @@ var fontNames = new[]
 
 var generator = new ArabicWordGenerator(@"C:\Users\PC\Desktop\ImageGenerator\ImageGenerator\ar_reviews_100k.txt");
 
+var imageToAdd = new Bitmap("C:\\Users\\PC\\Documents\\My Web Sites\\WebSite1\\w-brand.png");
+
 foreach (var fontName in fontNames)
 {
-    var fontSize = random.Next(18, 30);
+    var fontSize = Random.Shared.Next(18, 30);
 
     var regularFont = new Font(fontName, fontSize);
     var titleFont = new Font(fontName, fontSize + 8, FontStyle.Bold);
@@ -35,6 +37,37 @@ foreach (var fontName in fontNames)
     {
         var model = new JsonModel();
         g.FillRectangle(Brushes.White, new(0, 0, bitmap.Width, bitmap.Height));
+        var numberOfImagesToAdd = Random.Shared.Next(0, 3);
+        Debug.Assert(numberOfImagesToAdd is 0 or 1 or 2, "Update below code if this assert failed!!!");
+        var imageRects = Array.Empty<Rectangle>();
+        if (numberOfImagesToAdd == 1)
+        {
+            var (xDestination, yDestination) = bitmap.GetRandomLocationForImageToPut(imageToAdd);
+            bitmap.PutImage(imageToAdd, xDestination, yDestination);
+            imageRects = new Rectangle[]
+            {
+                new(xDestination, yDestination, imageToAdd.Width, imageToAdd.Height),
+            };
+        }
+        else if (numberOfImagesToAdd == 2)
+        {
+            var (xDestination1, yDestination1) = bitmap.GetRandomLocationForImageToPut(imageToAdd);
+            bitmap.PutImage(imageToAdd, xDestination1, yDestination1);
+            var oldRect = new Rectangle(xDestination1, yDestination1, imageToAdd.Width, imageToAdd.Height);
+            var (xDestination2, yDestination2) = bitmap.GetRandomLocationForSecondImageToPut(imageToAdd, oldRect);
+            bitmap.PutImage(imageToAdd, xDestination2, yDestination2);
+            imageRects = new Rectangle[]
+            {
+                new(xDestination1, yDestination1, imageToAdd.Width, imageToAdd.Height),
+                new(xDestination2, yDestination2, imageToAdd.Width, imageToAdd.Height),
+            };
+        }
+
+        foreach (var imageRect in imageRects)
+        {
+            model.Objects.Add(new() { Category = Category.ImageId, BoundingBox = new float[] { imageRect.X, imageRect.Y, imageRect.Width, imageRect.Height } });
+        }
+
         var currentY = 0;
         // Hard coded for now.
         for (int lineIndex = 0; lineIndex < 40; lineIndex++)
@@ -68,15 +101,18 @@ foreach (var fontName in fontNames)
             {
                 var wordMeasure = g.MeasureString(word, font, bitmap.Width, stringFormat);
                 var leftOfWord = currentX - wordMeasure.Width;
-                if (leftOfWord < 0)
+                currentX -= (int)(wordMeasure.Width + spaceMeasure.Width);
+                var wordRect = new RectangleF(leftOfWord, currentY, wordMeasure.Width, wordMeasure.Height);
+                if (leftOfWord < 0 || imageRects.Any(r => wordRect.IntersectsWith(r)))
                 {
                     continue;
                 }
+
                 g.DrawString(word, font, Brushes.Black, leftOfWord , currentY);
-                var wordRect = new RectangleF(leftOfWord, currentY, wordMeasure.Width, wordMeasure.Height);
+                
                 //g.DrawRectangle(pen, wordRect);
                 model.Objects.Add(new() { Text = word, Category = Category.TextId, BoundingBox = new[] { wordRect.X, wordRect.Y, wordRect.Width, wordRect.Height } });
-                currentX -= (int)(wordMeasure.Width + spaceMeasure.Width);
+                
                 
                 //pen = pen == Pens.Red ? Pens.Blue : Pens.Red;
             }
@@ -90,19 +126,19 @@ foreach (var fontName in fontNames)
     }
 }
 
-int GetNumberOfWords(LineKind lineKind)
+static int GetNumberOfWords(LineKind lineKind)
 {
     return lineKind switch
     {
-        LineKind.Title => random.Next(3, 7),
-        LineKind.Text => random.Next(8, 10),
+        LineKind.Title => Random.Shared.Next(3, 7),
+        LineKind.Text => Random.Shared.Next(8, 10),
         _ => throw new ArgumentOutOfRangeException(nameof(lineKind)),
     };
 }
 
-LineKind GetLineKind()
+static LineKind GetLineKind()
 {
-    if (random.NextDouble() <= 0.1)
+    if (Random.Shared.NextDouble() <= 0.1)
     {
         return LineKind.Title;
     }
