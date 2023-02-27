@@ -1,50 +1,116 @@
 ﻿using System.Drawing;
-using System.Drawing.Drawing2D;
-using System.Text;
+using System.Text.Json;
 using ImageGenerator;
 
-// Output image is 96dpi, and Skia doesn't seem to support changing it.
+// Output image is 96dpi.
 // Use this website to convert cm dimensions to pixels under a given resolution (in dpi) https://www.pixelto.net/cm-to-px-converter
+float mmpi = 25.4f;
+int dpi = 150;
+var bitmap = new Bitmap((int)(210 / mmpi * dpi), (int)(297 / mmpi * dpi));
+bitmap.SetResolution(dpi, dpi);
 
-const float Resolution = 300;
-const int WidthFor96Dpi = 794;
-const int HeightFor96Dpi = 1134;
-var bitmap = new Bitmap(width: (int)(WidthFor96Dpi * Resolution / 96), height: (int)(HeightFor96Dpi * Resolution / 96));
-bitmap.SetResolution(Resolution, Resolution);
 var g = Graphics.FromImage(bitmap);
-g.CompositingQuality = CompositingQuality.HighQuality;
-var font = new Font("Times New Roman", 16);
 
-var lineBuilder = new StringBuilder();
-var pageBuilder = new StringBuilder();
-const int NumberOfImages = 10;
-Directory.CreateDirectory("./data/");
-int lineHeight;
-for (int i = 0; i < NumberOfImages; i++)
+var random = new Random();
+const int NumberOfPages = 10;
+Directory.CreateDirectory("./data/text");
+
+var fontNames = new[]
 {
-    g.FillRectangle(Brushes.White, new(0, 0, bitmap.Width, bitmap.Height));
-    for (int line = 50; line < bitmap.Height; line += lineHeight + 5)
+    "Times New Roman",
+    //"Tahoma",
+    //"Arial",
+    //"Calibri",
+};
+
+var generator = new ArabicWordGenerator(@"C:\Users\PC\Desktop\ImageGenerator\ImageGenerator\ar_reviews_100k.txt");
+
+foreach (var fontName in fontNames)
+{
+    var fontSize = random.Next(18, 30);
+
+    var regularFont = new Font(fontName, fontSize);
+    var titleFont = new Font(fontName, fontSize + 8, FontStyle.Bold);
+    for (int pageIndex = 0; pageIndex < NumberOfPages; pageIndex++)
     {
-        lineBuilder.Clear();
-        // Don't generate a space at the beginning of a new line.
-        ArabicCharacterGenerator.PreviousWasSpace = true;
-        while (true)
+        var model = new JsonModel();
+        g.FillRectangle(Brushes.White, new(0, 0, bitmap.Width, bitmap.Height));
+        var currentY = 0;
+        // Hard coded for now.
+        for (int lineIndex = 0; lineIndex < 40; lineIndex++)
         {
-            lineBuilder.Append(ArabicCharacterGenerator.Generate());
-            var text = lineBuilder.ToString();
-            var textSize = g.MeasureString(text, font);
-            lineHeight = (int)textSize.Height;
-            if (textSize.Width >= bitmap.Width)
+            var currentX = bitmap.Width;
+            var lineKind = GetLineKind();
+            var font = lineKind switch
             {
-                g.DrawString(text, font, Brushes.Black, 0, line);
-                pageBuilder.AppendLine(text);
+                LineKind.Text => regularFont,
+                LineKind.Title => titleFont,
+                _ => throw new InvalidOperationException()
+            };
+
+            var numberOfWords = GetNumberOfWords(lineKind);
+            var words = Enumerable.Range(0, numberOfWords).Select((_, _) => generator.Generate()).ToArray();
+
+            var stringFormat = new StringFormat();
+            stringFormat.FormatFlags = StringFormatFlags.DirectionRightToLeft;
+
+            var lineText = string.Join(' ', words);
+            var lineTextMeasure = g.MeasureString(lineText, font, bitmap.Width, stringFormat);
+
+            if (currentY + lineTextMeasure.Height > bitmap.Height)
+            {
                 break;
             }
-        }
-    }
 
-    bitmap.Save($"./data/{i}.png");
-    File.WriteAllText($"./data/{i}.txt", pageBuilder.ToString());
-    pageBuilder.Clear();
+            var spaceMeasure = g.MeasureString(" ", font, bitmap.Width, stringFormat);
+            //var pen = Pens.Red;
+            foreach (var word in words)
+            {
+                var wordMeasure = g.MeasureString(word, font, bitmap.Width, stringFormat);
+                var leftOfWord = currentX - wordMeasure.Width;
+                if (leftOfWord < 0)
+                {
+                    continue;
+                }
+                g.DrawString(word, font, Brushes.Black, leftOfWord , currentY);
+                var wordRect = new RectangleF(leftOfWord, currentY, wordMeasure.Width, wordMeasure.Height);
+                //g.DrawRectangle(pen, wordRect);
+                model.Objects.Add(new() { Text = word, Category = Category.TextId, BoundingBox = new[] { wordRect.X, wordRect.Y, wordRect.Width, wordRect.Height } });
+                currentX -= (int)(wordMeasure.Width + spaceMeasure.Width);
+                
+                //pen = pen == Pens.Red ? Pens.Blue : Pens.Red;
+            }
+
+            currentY += (int)(lineTextMeasure.Height + 10);
+        }
+
+        Directory.CreateDirectory($"./data/{fontName}");
+        bitmap.Save($"./data/{fontName}/{pageIndex}.png");
+        File.WriteAllText($"./data/{fontName}/{pageIndex}.json", JsonSerializer.Serialize(model));
+    }
 }
 
+int GetNumberOfWords(LineKind lineKind)
+{
+    return lineKind switch
+    {
+        LineKind.Title => random.Next(3, 7),
+        LineKind.Text => random.Next(8, 10),
+        _ => throw new ArgumentOutOfRangeException(nameof(lineKind)),
+    };
+}
+
+LineKind GetLineKind()
+{
+    if (random.NextDouble() <= 0.1)
+    {
+        return LineKind.Title;
+    }
+
+    return LineKind.Text;
+}
+
+enum LineKind
+{
+    Text, Title
+}
